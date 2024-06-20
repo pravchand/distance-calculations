@@ -70,80 +70,65 @@ def extract_distances_durations(response, source_names, destination_names):
 
 
 
-results = []
-
-# Starting row index
-start_index = 0  
-
-# Batch size
-batch_size = 10
-loop_count = 0
-# Number of rows in the DataFrame
-num_rows = data.shape[0]
-
-# Initialize lists to store the current batch of API calls
 sources_batch = []
 source_names_batch = []
 destinations_batch = []
 destination_names_batch = []
+results = []
+loop_count = 0
+save_after_batches = 1000
+origins_batch_size = 10  
+destinations_batch_size = 10  
+num_rows = data.shape[0]
+start_index = 619 
 
-for i in range(start_index, min(start_index + batch_size, num_rows)):
+for i in range(start_index, start_index + 10):
     row_i = data.iloc[i]
     source = f"{row_i['latitude']},{row_i['longitude']}"
     source_name = row_i['AMC Name']
-    for j in range(num_rows):
-        if i != j:  # To avoid calculating distance/time from a place to itself
-            row_j = data.iloc[j]
-            destination = f"{row_j['latitude']},{row_j['longitude']}"
-            destination_name = row_j['AMC Name']
-            sources_batch.append(source)
-            source_names_batch.append(source_name)
-            destinations_batch.append(destination)
-            destination_names_batch.append(destination_name)
+    sources_batch.append(source)
+    source_names_batch.append(source_name)
+    print("done")
+count = 0
+for j in range(num_rows):
+    if j!=start_index: 
+        count += 1
+        row_j = data.iloc[j]
+        destination = f"{row_j['latitude']},{row_j['longitude']}"
+        destination_name = row_j['AMC Name']
+        destinations_batch.append(destination)
+        destination_names_batch.append(destination_name)
+        print(count,len(destinations_batch))
+        print(len(sources_batch))
+        if len(sources_batch) == origins_batch_size and len(destinations_batch) == destinations_batch_size:
+            response = distance_matrix(gmaps_client, sources_batch, destinations_batch)
+            batch_results = extract_distances_durations(response, source_names_batch, destination_names_batch)
+            results.extend(batch_results)
+            destinations_batch = []
+            destination_names_batch = []
+            #Increment loop count
+            loop_count += 1
+            if loop_count in [5, 25, 50, 150]:
+                print(batch_results)
+            # Save results to CSV after every 1000 batches
+            if loop_count % save_after_batches == 0:
+                results_df = pd.DataFrame(results)
+                if os.path.exists('results_working.csv'):
+                    results_df.to_csv('results_working.csv', mode='a', header=False, index=False)
+                    print("SAVED")
+                else:
+                    results_df.to_csv('results_working.csv', index=False)
+                results = []  # Clear results after saving to CSV
 
-            # When the batch is full, process it
-            if len(sources_batch) == batch_size:
-                response = distance_matrix\
-                    (gmaps_client, sources_batch, destinations_batch)
-                batch_results = extract_distances_durations\
-                    (response, source_names_batch, destination_names_batch)
-                results.extend(batch_results)
-                sources_batch = []  
-                source_names_batch = []  
-                destinations_batch = []  
-                destination_names_batch = [] 
-                # Increment loop count
-                loop_count += 1
-                if loop_count %100 == 0:
-                    print(loop_count)
-                # Save results to CSV after every 1000 loops
-                if loop_count % 1000 == 0:
-                    results_df = pd.DataFrame(results)
-                    if os.path.exists('results.csv'):
-                        results_df.to_csv('results.csv', \
-                                          mode='a', header=False, index=False)
-                        print('saved')
-                    else:
-                        results_df.to_csv('results.csv', index=False)
-                        print('saved')
-                    results = [] 
-
-
-# Process any remaining API calls in the last batch (if not processed already)
 if sources_batch and destinations_batch:
-    response = distance_matrix\
-        (gmaps_client, sources_batch, destinations_batch)
-    batch_results = extract_distances_durations\
-        (response, source_names_batch, destination_names_batch)
+    response = distance_matrix(gmaps_client, sources_batch, destinations_batch)
+    batch_results = extract_distances_durations(response, source_names_batch, destination_names_batch)
     results.extend(batch_results)
-
-# Save remaining results to CSV
-if results:
     results_df = pd.DataFrame(results)
-    if os.path.exists('results.csv'):
-        results_df.to_csv('results.csv', mode='a', header=False, index=False)
+    if os.path.exists('results_working.csv'):
+        results_df.to_csv('results_working.csv', mode='a', header=False, index=False)
     else:
-        results_df.to_csv('results.csv', index=False)
+        results_df.to_csv('results_working.csv', index=False)
 
 
 
